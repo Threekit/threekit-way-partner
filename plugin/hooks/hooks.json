@@ -1,0 +1,39 @@
+{
+  "description": "The Threekit Way .AI: the contract and the record at session start, with the daily pull of the method and the code; the scanner after every edit; the run log on every skill.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/session_start.py\"",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/scan_edit.py\"",
+            "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/scripts/log_skill.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

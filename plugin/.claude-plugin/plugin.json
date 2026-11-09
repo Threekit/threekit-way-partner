@@ -1,0 +1,19 @@
+{
+  "name": "threekit-way",
+  "version": "2.15.0",
+  "description": "The Threekit Way .AI for implementation partners. Connect once; the method comes from the Threekit dashboard.",
+  "author": {
+    "name": "Threekit Consulting",
+    "email": "parnera@threekit.com"
+  },
+  "keywords": [
+    "threekit",
+    "goto",
+    "consulting",
+    "delivery",
+    "methodology"
+  ],
+  "license": "Proprietary",
+  "repository": "https://github.com/Threekit/threekitway",
+  "homepage": "https://github.com/Threekit/threekitway"
+}
