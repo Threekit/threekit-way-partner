@@ -4,17 +4,20 @@
 Only in the partner build: it carries .claude-plugin/partner.json ({"dashboard": "https://way.3kit.ai"}). The team's
 plugin has no such file and never uses anything here; its computers keep their direct database connection.
 
-Connecting, once per computer (and again when the token ends, after 30 days):
-  1. the plugin makes a code and a link, way.3kit.ai/connect?code=ABCD-EFGH, and waits in the background
-  2. the person opens the link, signs in with the code Cloudflare emails them, and presses Connect this computer
-  3. the waiting plugin claims its token and keeps it in ~/.config/threekit-way/token (readable by the person only)
+Connecting, once per computer (and again when it ends):
+  1. the plugin shows the link way.3kit.ai/connect
+  2. the person opens it, signs in with the code Cloudflare emails them, presses Connect this computer and copies
+     the key the page shows
+  3. they paste the key in the chat; the agent runs `partner_link.py key <key>`, which keeps, readable by the person
+     only, this computer's token (~/.config/threekit-way/token) and their Cloudflare Access sign-in (cf-token)
 Every read and send then goes through the dashboard's /api/agent/ paths with that token, never the database: the
-person's own projects, their decisions, the method. A refused token (ended, revoked) is dropped and the next session
-shows the link again.
+person's own projects, their decisions, the method. Each call carries the Cloudflare sign-in as the cf-access-token
+header, so Cloudflare Access lets it through with no change on Cloudflare's side. When Cloudflare's sign-in ends (the
+session length of the Access application) or the dashboard ends the token (30 days, or the partner's access ended),
+what ended is dropped and the next session shows the link again.
 
     python3 partner_link.py status       connected or not, and to which dashboard
-    python3 partner_link.py connect      show the link and wait for the approval (up to 15 minutes)
-    python3 partner_link.py wait CODE    the background waiter (started by the plugin itself)
+    python3 partner_link.py key KEY      keep the key the connect page gave (what the person pasted)
     python3 partner_link.py library [words]        search the library files Threekit shares with partners (Part 4)
     python3 partner_link.py submit <project id> [--note TEXT] <file> ...
                                          send this repository's custom files to Threekit for the library, instead of
@@ -35,6 +38,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 PARTNER_FILE = os.path.join(os.path.dirname(HERE), ".claude-plugin", "partner.json")
 CONF = os.environ.get("THREEKIT_WAY_CONFIG") or os.path.join(os.path.expanduser("~"), ".config", "threekit-way")
 TOKEN_FILE = os.path.join(CONF, "token")
+CF_FILE = os.path.join(CONF, "cf-token")
 PENDING_FILE = os.path.join(CONF, "connect.json")
 CODE_MINUTES = 14
 
@@ -70,11 +74,49 @@ def _private_write(path, text):
         f.write(text)
 
 
-def drop_token():
+def cf_token():
     try:
-        os.remove(TOKEN_FILE)
+        with open(CF_FILE, "r", encoding="utf-8") as f:
+            return f.read().strip()
     except OSError:
-        pass
+        return ""
+
+
+def drop_token(cf_only=False):
+    for path in ([CF_FILE] if cf_only else [TOKEN_FILE, CF_FILE]):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def save_key(key):
+    """Keep what the connect page's key holds: this computer's token and the Cloudflare sign-in."""
+    import base64
+    key = str(key or "").strip()
+    if not key.startswith("twk1."):
+        raise ValueError("this is not a connection key: copy the whole key from the Connect this computer page")
+    body = key[5:]
+    try:
+        d = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)).decode("utf-8"))
+    except ValueError:
+        raise ValueError("the key is incomplete: copy the whole key again")
+    if not str(d.get("t", "")).startswith("twk_"):
+        raise ValueError("the key holds no token: press Connect this computer again")
+    _private_write(TOKEN_FILE, d["t"])
+    if d.get("cf"):
+        _private_write(CF_FILE, d["cf"])
+    else:
+        drop_token(cf_only=True)
+    return d
+
+
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, *a, **k):
+        return None
+
+
+_OPENER = urllib.request.build_opener(_NoRedirect)
 
 
 def connected():
@@ -86,12 +128,19 @@ def api(method, path, body=None, timeout=20):  # noqa: C901
     t = token()
     if not t:
         raise RuntimeError("this computer is not connected to The Threekit Way .AI: " + connect_line())
-    req = urllib.request.Request(base() + path, data=json.dumps(body).encode("utf-8") if body is not None else None, method=method,
-                                 headers={"Authorization": "Bearer " + t, "Content-Type": "application/json", "Accept": "application/json"})
+    headers = {"Authorization": "Bearer " + t, "Content-Type": "application/json", "Accept": "application/json"}
+    if cf_token():
+        headers["cf-access-token"] = cf_token()  # the person's Cloudflare Access sign-in: Cloudflare lets the call through
+    req = urllib.request.Request(base() + path, data=json.dumps(body).encode("utf-8") if body is not None else None, method=method, headers=headers)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:
+        with _OPENER.open(req, timeout=timeout) as r:
             return json.loads(r.read().decode("utf-8") or "{}")
     except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308) or "cloudflareaccess" in (e.headers.get("Location") or ""):
+            # Cloudflare sent the call to its sign-in page: the Cloudflare sign-in in the key has ended
+            drop_token(cf_only=True)
+            drop_token()
+            raise RuntimeError("the Cloudflare sign-in of this computer has ended: " + connect_line())
         if e.code == 401:
             drop_token()
             raise RuntimeError("the dashboard ended this computer's connection: " + connect_line())
@@ -127,7 +176,8 @@ def start():
 
 
 def connect_line():
-    return f"open {start()} , sign in with the code sent to your email, press Connect this computer, then carry on"
+    return (f"open {base()}/connect , sign in with the code sent to your email, press Connect this computer, copy the key "
+            "the page shows and paste it here")
 
 
 def wait(code, minutes=CODE_MINUTES, every=3):
@@ -167,16 +217,19 @@ def main():
             print(f"connected to {base()} as {me.get('name') or me.get('email')} ({me.get('role')})")
         except RuntimeError as e:
             print(str(e))
+    elif cmd == "key" and len(sys.argv) > 2:
+        try:
+            save_key("".join(sys.argv[2:]))
+            me = api("GET", "/api/agent/whoami")
+        except (ValueError, RuntimeError) as e:
+            sys.exit(str(e))
+        print(f"connected to {base()} as {me.get('name') or me.get('email')}; the skills read the method from the dashboard from now on")
+        try:
+            subprocess.run([sys.executable, os.path.join(HERE, "plugin_source.py"), "fetch", "--quiet"], timeout=120)
+        except (OSError, subprocess.SubprocessError):
+            pass
     elif cmd == "connect":
-        if token():
-            print("already connected to " + base())
-            return
-        link = start()
-        print("Open " + link + " , sign in with the code sent to your email and press Connect this computer. Waiting...")
-        code = urllib.parse.parse_qs(urllib.parse.urlsplit(link).query).get("code", [""])[0]
-        print("connected" if wait(code) else "not connected: the link ended; run this again")
-    elif cmd == "wait" and len(sys.argv) > 2:
-        wait(sys.argv[2])
+        print("Not connected: " + connect_line() + ". Then run: python3 " + os.path.abspath(__file__) + " key <the key>")
     elif cmd == "library":
         q = " ".join(sys.argv[2:])
         try:

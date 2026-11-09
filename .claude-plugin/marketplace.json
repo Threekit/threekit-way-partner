@@ -7,7 +7,7 @@
     {
       "name": "threekit-way",
       "source": "./plugin",
-      "version": "2.15.0",
+      "version": "2.16.0",
       "description": "The Threekit Way .AI for implementation partners: connect once, the method comes from the Threekit dashboard."
     }
   ]

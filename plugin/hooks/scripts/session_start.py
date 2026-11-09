@@ -33,7 +33,8 @@ def partner_start():
         import partner_link
         if not partner_link.token():
             print("The Threekit Way .AI (partner): this computer is not connected yet, so the skills have no method. "
-                  "Before anything else, tell the person in one line: " + partner_link.connect_line() + ".")
+                  "Before anything else, tell the person in one line: " + partner_link.connect_line() + ". When they paste the "
+                  "key, run `python3 " + os.path.join(ROOT, "scripts", "partner_link.py") + " key <the key>`.")
             return
         subprocess.Popen([sys.executable, os.path.join(ROOT, "scripts", "plugin_source.py"), "fetch", "--daily", "--quiet"],
                          stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)

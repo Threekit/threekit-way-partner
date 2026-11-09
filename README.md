@@ -18,6 +18,7 @@ Codex (the CLI, the IDE extension and the desktop app):
 Claude (claude.ai or Cowork): download the plugin file from https://way.3kit.ai/partner after signing in, then Customize,
 Plugins, Upload plugin.
 
-The first session shows a link to https://way.3kit.ai: sign in with the code sent to your email and press Connect this computer.
-The skills then read the method from the dashboard, kept current every day. This repository holds no method: only the
+The first session shows a link to https://way.3kit.ai/connect: sign in with the code sent to your email, press Connect this
+computer, copy the key and paste it in the chat. The skills then read the method from the dashboard, kept current
+every day. When your sign-in ends, the editor shows the link again. This repository holds no method: only the
 plugin's scripts and hooks, and each skill's first line.

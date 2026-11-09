@@ -196,7 +196,8 @@ def main():
             if t is None:
                 import partner_link
                 print("STOP: this computer is not connected to The Threekit Way .AI, so the method is not here yet. Tell the person, in one line: "
-                      + partner_link.connect_line() + ". When they say it is done, run this same command again.")
+                      + partner_link.connect_line() + ". When they paste the key, run `python3 " + os.path.join(HERE, "partner_link.py")
+                      + " key <the key>`, then run this same command again.")
                 return
         if t is None:
             print("installed version is current")
